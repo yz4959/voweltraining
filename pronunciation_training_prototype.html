@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VowelVision AI - Visual Vowel Pronunciation Lab</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            },
+            voweli: '#10b981',  <!-- Emerald green for /i/ -->
+            vowelae: '#f59e0b', <!-- Amber for /æ/ -->
+            cyber: '#06b6d4'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['Fira Code', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- MediaPipe Face Mesh & Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <!-- Google Fonts: Inter & Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Custom Styles & Animations -->
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .glow-cyan {
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+    }
+    .glow-amber {
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+    }
+    .grid-bg {
+      background-size: 30px 30px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+    .light .grid-bg {
+      background-image: 
+        linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+    }
+    /* Pulsing recording aura */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-record {
+      animation: pulse-ring 1.5s infinite ease-in-out;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.5);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen transition-colors duration-300 grid-bg selection:bg-indigo-500 selection:text-white">
+
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Logo & Brand Title -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-cyan-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-300">
+              VowelVision AI
+            </h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 font-mono">
+              v1.0 Prototype
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Visual Articulatory Feedback for Front Vowels <span class="font-mono text-emerald-400">/i/</span> & <span class="font-mono text-amber-400">/æ/</span></p>
+        </div>
+      </div>
+
+      <!-- Controls & Status Indicators -->
+      <div class="flex items-center space-x-3 sm:space-x-4">
+        <!-- Status Indicator Pill -->
+        <div id="status-pill" class="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-medium">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          <span id="status-text" class="text-slate-300">Initializing...</span>
+        </div>
+
+        <!-- Calibration Quick Trigger -->
+        <button id="btn-calibrate-header" onclick="startCalibration()" class="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-medium transition flex items-center space-x-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+          </svg>
+          <span class="hidden md:inline">Recalibrate Neutral</span>
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="btn-theme" onclick="toggleTheme()" class="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition">
+          <svg id="theme-icon-dark" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg id="theme-icon-light" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Minimal Pair Selector Banner -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Select Minimal Pair Prompt</label>
+          <h2 class="text-sm text-slate-300">Choose a contrast set to test mouth height & spread articulatory differences:</h2>
+        </div>
+
+        <!-- Pair Cards Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
+          <!-- Pair 1: Beet / Bat -->
+          <button onclick="selectPair(0)" id="pair-btn-0" class="pair-card p-2.5 rounded-xl border border-indigo-500 bg-indigo-500/10 text-left transition hover:border-indigo-400 focus:outline-none">
+            <div class="text-xs text-indigo-400 font-medium">Pair 1</div>
+            <div class="flex items-center space-x-1.5 font-bold text-sm">
+              <span class="text-emerald-400">Beet (/i/)</span>
+              <span class="text-slate-500">vs</span>
+              <span class="text-amber-400">Bat (/æ/)</span>
+            </div>
+          </button>
+
+          <!-- Pair 2: Seat / Sat -->
+          <button onclick="selectPair(1)" id="pair-btn-1" class="pair-card p-2.5 rounded-xl border border-slate-800 bg-slate-900 text-left transition hover:border-slate-700 focus:outline-none">
+            <div class="text-xs text-slate-500 font-medium">Pair 2</div>
+            <div class="flex items-center space-x-1.5 font-bold text-sm">
+              <span class="text-emerald-400">Seat (/i/)</span>
+              <span class="text-slate-500">vs</span>
+              <span class="text-amber-400">Sat (/æ/)</span>
+            </div>
+          </button>
+
+          <!-- Pair 3: Feet / Fat -->
+          <button onclick="selectPair(2)" id="pair-btn-2" class="pair-card p-2.5 rounded-xl border border-slate-800 bg-slate-900 text-left transition hover:border-slate-700 focus:outline-none">
+            <div class="text-xs text-slate-500 font-medium">Pair 3</div>
+            <div class="flex items-center space-x-1.5 font-bold text-sm">
+              <span class="text-emerald-400">Feet (/i/)</span>
+              <span class="text-slate-500">vs</span>
+              <span class="text-amber-400">Fat (/æ/)</span>
+            </div>
+          </button>
+
+          <!-- Pair 4: Peek / Pack -->
+          <button onclick="selectPair(3)" id="pair-btn-3" class="pair-card p-2.5 rounded-xl border border-slate-800 bg-slate-900 text-left transition hover:border-slate-700 focus:outline-none">
+            <div class="text-xs text-slate-500 font-medium">Pair 4</div>
+            <div class="flex items-center space-x-1.5 font-bold text-sm">
+              <span class="text-emerald-400">Peek (/i/)</span>
+              <span class="text-slate-500">vs</span>
+              <span class="text-amber-400">Pack (/æ/)</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN TWO-COLUMN DASHBOARD GRID -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- LEFT COLUMN: VIDEO FEED & CANVAS OVERLAY (7 cols) -->
+      <div class="lg:col-span-7 space-y-4">
+        
+        <!-- Video Canvas Wrapper Container -->
+        <div class="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-[4/3] flex items-center justify-center group">
+          
+          <!-- Hidden Video Feed -->
+          <video id="webcam" class="hidden" playsinline muted></video>
+
+          <!-- Main Drawing Canvas -->
+          <canvas id="output-canvas" class="w-full h-full object-cover rounded-2xl"></canvas>
+
+          <!-- HUD Top Overlay Stats -->
+          <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+            <div class="flex items-center space-x-2">
+              <span id="target-vowel-badge" class="px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold backdrop-blur-md">
+                Target: /i/ (beet)
+              </span>
+              <span id="fps-counter" class="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 font-mono text-xs backdrop-blur-md">
+                -- FPS
+              </span>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <button onclick="toggleSimMode()" class="pointer-events-auto px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700 hover:border-indigo-500 text-slate-300 text-xs font-medium transition backdrop-blur-md flex items-center space-x-1">
+                <span id="sim-indicator" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span id="sim-label">Simulation Mode</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Calibration / Recording Countdown Overlay -->
+          <div id="overlay-screen" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6 transition-all duration-300 hidden z-20">
+            <div id="overlay-icon" class="w-16 h-16 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3 border border-indigo-500/30">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+              </svg>
+            </div>
+            <h3 id="overlay-title" class="text-xl font-bold text-white mb-1">Calibration Countdown</h3>
+            <p id="overlay-subtitle" class="text-sm text-slate-300 max-w-sm mb-4">Look directly at camera with a neutral closed mouth.</p>
+            <div id="overlay-timer" class="text-5xl font-black font-mono text-indigo-400 mb-2">3</div>
+            <div id="overlay-progress-bar" class="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="overlay-progress-fill" class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300 w-0"></div>
+            </div>
+          </div>
+
+        </div> <!-- End Canvas Wrapper -->
+
+        <!-- VIDEO FEED CONTROLS BAR -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          
+          <!-- Mode Switcher Tabs -->
+          <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
+            <button onclick="setPracticeMode('live')" id="mode-btn-live" class="flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 transition">
+              Live Continuous
+            </button>
+            <button onclick="setPracticeMode('record')" id="mode-btn-record" class="flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
+              1.5s Evaluate Frame
+            </button>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            
+            <!-- TTS Audio Reference Button -->
+            <button onclick="playTargetTTS()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+              </svg>
+              <span>Listen Sample</span>
+            </button>
+
+            <!-- Evaluate Target Word Button -->
+            <button id="btn-evaluate" onclick="triggerEvaluation()" class="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg shadow-indigo-500/25 transition flex items-center justify-center space-x-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span id="eval-btn-label">Evaluate "beet"</span>
+              <kbd class="hidden md:inline px-1.5 py-0.5 text-[10px] bg-indigo-900/60 rounded text-indigo-200 border border-indigo-400/30">Space</kbd>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- MANUAL SIMULATION CONTROLS (Active in Simulation Mode) -->
+        <div id="sim-controls-panel" class="bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-4 space-y-3 hidden">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+              <h3 class="text-xs font-bold text-cyan-300 uppercase tracking-wider">Manual Face Synthesizer (No Camera Needed)</h3>
+            </div>
+            <span class="text-xs text-slate-400">Drag sliders to test biomechanics & overlays</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Jaw Opening Slider -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-slate-400">Jaw Height (Displacement):</span>
+                <span id="sim-jaw-val" class="text-cyan-400 font-bold">12px</span>
+              </div>
+              <input type="range" id="sim-jaw" min="4" max="50" value="12" step="1" oninput="updateSimFromSliders()" class="w-full accent-cyan-400 bg-slate-800 rounded-lg h-2 cursor-pointer">
+              <div class="flex justify-between text-[10px] text-slate-500">
+                <span>High Jaw (/i/)</span>
+                <span>Low Drop (/æ/)</span>
+              </div>
+            </div>
+
+            <!-- Lip Width Slider -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-slate-400">Lip Corner Width (Retraction):</span>
+                <span id="sim-width-val" class="text-cyan-400 font-bold">60px</span>
+              </div>
+              <input type="range" id="sim-width" min="35" max="95" value="60" step="1" oninput="updateSimFromSliders()" class="w-full accent-cyan-400 bg-slate-800 rounded-lg h-2 cursor-pointer">
+              <div class="flex justify-between text-[10px] text-slate-500">
+                <span>Narrow</span>
+                <span>Wide Smile Spread</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- END LEFT COLUMN -->
+
+
+      <!-- RIGHT COLUMN: DIAGNOSTIC FEEDBACK & METRICS (5 cols) -->
+      <div class="lg:col-span-5 space-y-4">
+        
+        <!-- Actionable Diagnostic Feedback Card -->
+        <div id="diagnostic-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl transition-all duration-300 relative overflow-hidden">
+          
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Articulatory Diagnostic</span>
+            <span id="match-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+              Awaiting Target Word
+            </span>
+          </div>
+
+          <!-- Main Status Statement -->
+          <div class="mb-4">
+            <h3 id="diag-headline" class="text-lg font-bold text-white mb-1">Ready for Pronunciation Test</h3>
+            <p id="diag-subtitle" class="text-xs text-slate-400 leading-relaxed">
+              Target target words using <span class="font-mono text-emerald-400">/i/</span> (wide smile, low jaw) or <span class="font-mono text-amber-400">/æ/</span> (open jaw drop).
+            </p>
+          </div>
+
+          <!-- Actionable Biomechanical Tips Box -->
+          <div id="tip-box" class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div class="flex items-start space-x-2.5">
+              <div id="tip-icon-bg" class="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0 mt-0.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <span class="text-xs font-bold text-slate-300 block">Biomechanical Cue</span>
+                <p id="diag-tip" class="text-xs text-slate-400 leading-normal">
+                  Click 'Evaluate' or press Space while pronouncing the target word to analyze your peak mouth gesture.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Score Breakdown Progress Bar -->
+          <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+            <div class="text-xs text-slate-400">Match Accuracy Score</div>
+            <div id="accuracy-score" class="text-lg font-mono font-extrabold text-indigo-400">-- %</div>
+          </div>
+
+        </div> <!-- End Diagnostic Card -->
+
+
+        <!-- VISUAL METRICS DASHBOARD -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Real-time Biomechanical Gauges</h3>
+
+          <!-- Gauge 1: Mouth Aspect Ratio (MAR) -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300 font-medium">Mouth Aspect Ratio (MAR)</span>
+              <span id="mar-val" class="font-mono text-cyan-400 font-bold">0.00</span>
+            </div>
+            <div class="w-full h-3 bg-slate-950 rounded-full p-0.5 border border-slate-800 relative">
+              <div id="mar-bar" class="h-full bg-gradient-to-r from-emerald-400 to-amber-500 rounded-full transition-all duration-150 w-0"></div>
+              <!-- Target zone marker line -->
+              <div id="mar-target-marker" class="absolute top-0 bottom-0 w-1 bg-white shadow-sm z-10 rounded-full opacity-0" style="left: 30%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>0.10 (Closed)</span>
+              <span>0.35 (/i/ Target)</span>
+              <span>0.70+ (/æ/ Drop)</span>
+            </div>
+          </div>
+
+          <!-- Gauge 2: Lip Spread Expansion Ratio -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300 font-medium">Lip Retraction Spread Delta</span>
+              <span id="spread-val" class="font-mono text-emerald-400 font-bold">+0%</span>
+            </div>
+            <div class="w-full h-3 bg-slate-950 rounded-full p-0.5 border border-slate-800">
+              <div id="spread-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-150 w-0"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>0% (Neutral)</span>
+              <span>+15% (Mild Smile)</span>
+              <span>+35% (Max Spread)</span>
+            </div>
+          </div>
+
+          <!-- Gauge 3: Vowel Classifier Confidence Gauge -->
+          <div class="space-y-1.5 pt-2 border-t border-slate-800">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300 font-medium">Vowel Production Classifier</span>
+              <span id="confidence-label" class="font-mono text-xs text-indigo-300">Undetermined</span>
+            </div>
+            <div class="h-4 bg-slate-950 rounded-lg p-0.5 border border-slate-800 flex overflow-hidden">
+              <div id="prob-i-bar" class="h-full bg-emerald-500 transition-all duration-200 w-1/2 flex items-center justify-center text-[9px] font-bold text-slate-950">
+                /i/ 50%
+              </div>
+              <div id="prob-ae-bar" class="h-full bg-amber-500 transition-all duration-200 w-1/2 flex items-center justify-center text-[9px] font-bold text-slate-950">
+                /æ/ 50%
+              </div>
+            </div>
+          </div>
+
+        </div> <!-- End Gauges Dashboard -->
+
+        <!-- Baseline Calibration Summary Card -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+          <div class="space-y-0.5">
+            <div class="text-xs font-bold text-slate-300">Individual Baseline Offset</div>
+            <div id="calib-stats" class="text-[11px] font-mono text-slate-400">
+              Baseline MAR: <span id="base-mar-text" class="text-slate-200">0.18</span> | Baseline Spread: <span id="base-spread-text" class="text-slate-200">0.42</span>
+            </div>
+          </div>
+          <button onclick="startCalibration()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-indigo-300 transition border border-slate-700">
+            Calibrate
+          </button>
+        </div>
+
+      </div> <!-- END RIGHT COLUMN -->
+
+    </div> <!-- END TWO COLUMN GRID -->
+
+
+    <!-- ATTEMPT HISTORY LOG TABLE SECTION -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white">Utterance Attempt History Log</h3>
+          <p class="text-xs text-slate-400">Recorded articulation metrics from recent evaluate attempts</p>
+        </div>
+        <button onclick="clearHistoryLog()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 text-xs transition border border-slate-700">
+          Clear History
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="text-[11px] uppercase font-mono text-slate-400 bg-slate-950/60 border-b border-slate-800">
+            <tr>
+              <th class="p-3 rounded-l-lg">Time</th>
+              <th class="p-3">Target Word</th>
+              <th class="p-3">Target Vowel</th>
+              <th class="p-3">Detected Vowel</th>
+              <th class="p-3">Peak MAR</th>
+              <th class="p-3">Accuracy</th>
+              <th class="p-3 rounded-r-lg">Biomechanical Tip</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody" class="divide-y divide-slate-800 text-slate-300">
+            <!-- Row placeholder when empty -->
+            <tr id="empty-history-row">
+              <td colspan="7" class="p-6 text-center text-slate-500 italic">
+                No evaluation history recorded yet. Select a word and click "Evaluate".
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- JAVASCRIPT LOGIC ENGINE -->
+  <script>
+    /* Minimal Pair Dataset */
+    const MINIMAL_PAIRS = [
+      { id: 0, wordI: 'beet', wordAe: 'bat', targetI: '/i/', targetAe: '/æ/' },
+      { id: 1, wordI: 'seat', wordAe: 'sat', targetI: '/i/', targetAe: '/æ/' },
+      { id: 2, wordI: 'feet', wordAe: 'fat', targetI: '/i/', targetAe: '/æ/' },
+      { id: 3, wordI: 'peek', wordAe: 'pack', targetI: '/i/', targetAe: '/æ/' }
+    ];
+
+    /* Global Application State */
+    let activePairIndex = 0;
+    let selectedVowelTarget = 'i'; // 'i' or 'ae'
+    let currentSelectedWord = 'beet';
+    
+    let practiceMode = 'live'; // 'live' or 'record'
+    let isRecording = false;
+    let recordingTimer = null;
+    let frameBuffer = [];
+
+    let isSimMode = false;
+    let cameraInstance = null;
+    let faceMeshInstance = null;
+
+    /* Theme State */
+    let isDarkMode = true;
+
+    /* Calibration Baseline Data */
+    let calibration = {
+      isCalibrated: false,
+      baselineMAR: 0.18,
+      baselineSpreadRatio: 0.45,
+      samplesMAR: [],
+      samplesSpread: []
+    };
+
+    /* Live Frame Data Cache */
+    let liveMetrics = {
+      mar: 0.18,
+      spreadRatio: 0.45,
+      lipHeightPx: 12,
+      lipWidthPx: 60,
+      eyeDistPx: 120,
+      probI: 0.5,
+      probAe: 0.5,
+      predictedVowel: 'i',
+      landmarks: null,
+      fps: 0
+    };
+
+    let historyLog = [];
+
+    /* Performance Tracker */
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+
+    /* DOM Element References */
+    const videoElem = document.getElementById('webcam');
+    const canvasElem = document.getElementById('output-canvas');
+    const ctx = canvasElem.getContext('2d');
+
+    /* INITIALIZATION ON WINDOW LOAD */
+    window.onload = async function() {
+      setupCanvasDimensions();
+      window.addEventListener('resize', setupCanvasDimensions);
+
+      // Keyboard Shortcut listener (Spacebar to Evaluate)
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+          e.preventDefault();
+          triggerEvaluation();
+        }
+      });
+
+      // Initialize FaceMesh
+      await initFaceMesh();
+    };
+
+    function setupCanvasDimensions() {
+      const container = canvasElem.parentElement;
+      canvasElem.width = container.clientWidth;
+      canvasElem.height = container.clientHeight;
+    }
+
+    /* THEME SWITCHER */
+    function toggleTheme() {
+      isDarkMode = !isDarkMode;
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        document.getElementById('theme-icon-dark').classList.add('hidden');
+        document.getElementById('theme-icon-light').classList.remove('hidden');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+        document.getElementById('theme-icon-dark').classList.remove('hidden');
+        document.getElementById('theme-icon-light').classList.add('hidden');
+      }
+    }
+
+    /* MINIMAL PAIR SELECTION */
+    function selectPair(index) {
+      activePairIndex = index;
+      
+      // Update pair buttons styling
+      for (let i = 0; i < 4; i++) {
+        const btn = document.getElementById(`pair-btn-${i}`);
+        if (i === index) {
+          btn.className = "pair-card p-2.5 rounded-xl border border-indigo-500 bg-indigo-500/10 text-left transition hover:border-indigo-400 focus:outline-none";
+        } else {
+          btn.className = "pair-card p-2.5 rounded-xl border border-slate-800 bg-slate-900 text-left transition hover:border-slate-700 focus:outline-none";
+        }
+      }
+
+      // Default target word is wordI (/i/)
+      setWordTarget(MINIMAL_PAIRS[index].wordI, 'i');
+    }
+
+    function setWordTarget(word, vowel) {
+      currentSelectedWord = word;
+      selectedVowelTarget = vowel;
+
+      const badge = document.getElementById('target-vowel-badge');
+      const evalBtnLabel = document.getElementById('eval-btn-label');
+
+      if (vowel === 'i') {
+        badge.className = "px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold backdrop-blur-md";
+        badge.innerText = `Target: /i/ (${word})`;
+      } else {
+        badge.className = "px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-bold backdrop-blur-md";
+        badge.innerText = `Target: /æ/ (${word})`;
+      }
+
+      evalBtnLabel.innerText = `Evaluate "${word}"`;
+
+      // Update diagnostic card prompt
+      document.getElementById('diag-headline').innerText = `Target Word: "${word}" (${vowel === 'i' ? '/i/' : '/æ/'})`;
+      document.getElementById('match-badge').innerText = `Targeting /${vowel === 'i' ? 'i' : 'æ'}/`;
+      document.getElementById('match-badge').className = vowel === 'i' 
+        ? "px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+        : "px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40";
+    }
+
+    /* PRACTICE MODE SWITCHING */
+    function setPracticeMode(mode) {
+      practiceMode = mode;
+      const liveBtn = document.getElementById('mode-btn-live');
+      const recBtn = document.getElementById('mode-btn-record');
+
+      if (mode === 'live') {
+        liveBtn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 transition";
+        recBtn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition";
+      } else {
+        recBtn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 transition";
+        liveBtn.className = "flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition";
+      }
+    }
+
+    /* TTS PLAYBACK UTILITY */
+    function playTargetTTS() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(currentSelectedWord);
+        utterance.rate = 0.8; // slightly slower enunciation
+        utterance.lang = 'en-US';
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    /* SIMULATION MODE TOGGLE */
+    function toggleSimMode() {
+      isSimMode = !isSimMode;
+      const indicator = document.getElementById('sim-indicator');
+      const label = document.getElementById('sim-label');
+      const simPanel = document.getElementById('sim-controls-panel');
+      const statusText = document.getElementById('status-text');
+      const statusDot = document.getElementById('status-dot');
+
+      if (isSimMode) {
+        indicator.className = "w-2 h-2 rounded-full bg-cyan-400 animate-pulse";
+        label.innerText = "Sim Active";
+        simPanel.classList.remove('hidden');
+        statusText.innerText = "Simulation Mode Active";
+        statusDot.className = "w-2 h-2 rounded-full bg-cyan-400";
+        updateSimFromSliders();
+        requestAnimationFrame(renderLoop);
+      } else {
+        indicator.className = "w-2 h-2 rounded-full bg-slate-500";
+        label.innerText = "Simulation Mode";
+        simPanel.classList.add('hidden');
+        statusText.innerText = "Camera Active";
+        statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+      }
+    }
+
+    function updateSimFromSliders() {
+      if (!isSimMode) return;
+
+      const jawVal = parseFloat(document.getElementById('sim-jaw').value);
+      const widthVal = parseFloat(document.getElementById('sim-width').value);
+
+      document.getElementById('sim-jaw-val').innerText = `${jawVal}px`;
+      document.getElementById('sim-width-val').innerText = `${widthVal}px`;
+
+      const eyeDist = 120;
+      const mar = jawVal / widthVal;
+      const spreadRatio = widthVal / eyeDist;
+
+      // Classify based on MAR & Spread
+      classifyAndStoreMetrics(mar, spreadRatio, jawVal, widthVal, eyeDist, null);
+    }
+
+    /* MEDIAPIPE FACE MESH INITIALIZATION */
+    async function initFaceMesh() {
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+
+      try {
+        if (typeof FaceMesh === 'undefined') {
+          throw new Error("MediaPipe FaceMesh script not available.");
+        }
+
+        faceMeshInstance = new FaceMesh({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+
+        faceMeshInstance.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        faceMeshInstance.onResults(onFaceMeshResults);
+
+        // Setup Camera
+        if (typeof Camera !== 'undefined') {
+          cameraInstance = new Camera(videoElem, {
+            onFrame: async () => {
+              if (!isSimMode) {
+                await faceMeshInstance.send({ image: videoElem });
+              }
+            },
+            width: 640,
+            height: 480
+          });
+          await cameraInstance.start();
+
+          statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+          statusText.innerText = "Camera Active";
+          requestAnimationFrame(renderLoop);
+        } else {
+          throw new Error("Camera Utils library failed to load.");
+        }
+
+      } catch (err) {
+        console.warn("Camera or MediaPipe initialization failed. Falling back to Simulation mode:", err);
+        statusDot.className = "w-2 h-2 rounded-full bg-amber-400";
+        statusText.innerText = "Simulation Mode (Offline)";
+        toggleSimMode();
+      }
+    }
+
+    /* MEDIAPIPE ON RESULTS CALLBACK */
+    function onFaceMeshResults(results) {
+      if (isSimMode) return;
+
+      if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+        document.getElementById('status-text').innerText = "Searching for face...";
+        document.getElementById('status-dot').className = "w-2 h-2 rounded-full bg-amber-400";
+        return;
+      }
+
+      document.getElementById('status-text').innerText = "Face Detected";
+      document.getElementById('status-dot').className = "w-2 h-2 rounded-full bg-emerald-400";
+
+      const landmarks = results.multiFaceLandmarks[0];
+      const imgW = canvasElem.width;
+      const imgH = canvasElem.height;
+
+      /* Extract Key Points:
+         Landmark 13: Upper Inner Lip
+         Landmark 14: Lower Inner Lip
+         Landmark 78: Left Corner Inner Lip
+         Landmark 308: Right Corner Inner Lip
+         Landmark 33: Left Eye Outer Corner
+         Landmark 263: Right Eye Outer Corner
+      */
+      const pTop = landmarks[13];
+      const pBot = landmarks[14];
+      const pLeft = landmarks[78];
+      const pRight = landmarks[308];
+      const pEyeL = landmarks[33];
+      const pEyeR = landmarks[263];
+
+      // Calculate Euclidean Distances (normalized by image size)
+      const lipHeightPx = Math.hypot((pTop.x - pBot.x) * imgW, (pTop.y - pBot.y) * imgH);
+      const lipWidthPx = Math.hypot((pLeft.x - pRight.x) * imgW, (pLeft.y - pRight.y) * imgH);
+      const eyeDistPx = Math.hypot((pEyeL.x - pEyeR.x) * imgW, (pEyeL.y - pEyeR.y) * imgH);
+
+      // Key Biomechanical Metrics
+      const mar = lipHeightPx / Math.max(lipWidthPx, 1.0);
+      const spreadRatio = lipWidthPx / Math.max(eyeDistPx, 1.0);
+
+      classifyAndStoreMetrics(mar, spreadRatio, lipHeightPx, lipWidthPx, eyeDistPx, landmarks);
+
+      // Collect sample if calibration is running
+      if (isCalibrating) {
+        calibration.samplesMAR.push(mar);
+        calibration.samplesSpread.push(spreadRatio);
+      }
+
+      // Buffer frame if 1.5s evaluation recording is active
+      if (isRecording) {
+        frameBuffer.push({
+          timestamp: performance.now(),
+          mar: mar,
+          spreadRatio: spreadRatio,
+          lipHeightPx: lipHeightPx,
+          lipWidthPx: lipWidthPx,
+          probI: liveMetrics.probI,
+          probAe: liveMetrics.probAe
+        });
+      }
+    }
+
+    /* VOWEL CLASSIFIER & METRICS MATH ENGINE */
+    function classifyAndStoreMetrics(mar, spreadRatio, lipHeight, lipWidth, eyeDist, landmarks) {
+      // Delta calculations relative to individual baseline calibration
+      const baseMAR = calibration.baselineMAR;
+      const baseSpread = calibration.baselineSpreadRatio;
+
+      const marDelta = (mar - baseMAR) / baseMAR;
+      const spreadDelta = (spreadRatio - baseSpread) / baseSpread;
+
+      /* Heuristic Probabilistic Classifier for /i/ vs /æ/:
+         - Vowel /i/ (beet): High spreadDelta (+15% to +40%), minimal or slight MAR change.
+         - Vowel /æ/ (bat): High MAR drop (+50% to +150%), neutral or lower spread.
+      */
+      let scoreI = 0;
+      let scoreAe = 0;
+
+      // MAR component
+      if (mar < baseMAR * 1.35) {
+        scoreI += 0.55;
+      } else {
+        scoreAe += Math.min(1.0, (mar - baseMAR * 1.35) / (baseMAR * 1.5));
+      }
+
+      // Spread component
+      if (spreadDelta > 0.08) {
+        scoreI += 0.45 * Math.min(1.0, spreadDelta / 0.25);
+      } else {
+        scoreAe += 0.35;
+      }
+
+      const totalScore = scoreI + scoreAe || 1.0;
+      const probI = Math.min(0.99, Math.max(0.01, scoreI / totalScore));
+      const probAe = 1.0 - probI;
+
+      liveMetrics = {
+        mar: mar,
+        spreadRatio: spreadRatio,
+        marDelta: marDelta,
+        spreadDelta: spreadDelta,
+        lipHeightPx: lipHeight,
+        lipWidthPx: lipWidth,
+        eyeDistPx: eyeDist,
+        probI: probI,
+        probAe: probAe,
+        predictedVowel: probI > probAe ? 'i' : 'ae',
+        landmarks: landmarks
+      };
+
+      // Calculate FPS
+      const now = performance.now();
+      frameCount++;
+      if (now - lastFrameTime >= 1000) {
+        liveMetrics.fps = frameCount;
+        frameCount = 0;
+        lastFrameTime = now;
+        document.getElementById('fps-counter').innerText = `${liveMetrics.fps} FPS`;
+      }
+
+      // Update UI Metrics Dashboard
+      updateGaugesUI();
+    }
+
+    /* METRICS DASHBOARD UI UPDATER */
+    function updateGaugesUI() {
+      // Update MAR Gauge
+      const marBar = document.getElementById('mar-bar');
+      const marVal = document.getElementById('mar-val');
+      marVal.innerText = liveMetrics.mar.toFixed(2);
+      
+      // Map MAR from 0.0 -> 0.8 to 0% -> 100%
+      const marPct = Math.min(100, Math.max(0, (liveMetrics.mar / 0.70) * 100));
+      marBar.style.width = `${marPct}%`;
+
+      // Update Spread Gauge
+      const spreadBar = document.getElementById('spread-bar');
+      const spreadVal = document.getElementById('spread-val');
+      const spreadPct = Math.min(100, Math.max(0, liveMetrics.spreadDelta * 250)); // Scale %
+      
+      const spreadDeltaPctStr = (liveMetrics.spreadDelta * 100).toFixed(0);
+      spreadVal.innerText = `${spreadDeltaPctStr >= 0 ? '+' : ''}${spreadDeltaPctStr}%`;
+      spreadBar.style.width = `${Math.max(5, spreadPct)}%`;
+
+      // Update Classifier Confidence Bar
+      const probIBar = document.getElementById('prob-i-bar');
+      const probAeBar = document.getElementById('prob-ae-bar');
+      const confidenceLabel = document.getElementById('confidence-label');
+
+      const pctI = Math.round(liveMetrics.probI * 100);
+      const pctAe = 100 - pctI;
+
+      probIBar.style.width = `${pctI}%`;
+      probIBar.innerText = `/i/ ${pctI}%`;
+      probAeBar.style.width = `${pctAe}%`;
+      probAeBar.innerText = `/æ/ ${pctAe}%`;
+
+      if (pctI > 60) {
+        confidenceLabel.innerText = "High /i/ Articulation";
+        confidenceLabel.className = "font-mono text-xs text-emerald-400 font-bold";
+      } else if (pctAe > 60) {
+        confidenceLabel.innerText = "High /æ/ Articulation";
+        confidenceLabel.className = "font-mono text-xs text-amber-400 font-bold";
+      } else {
+        confidenceLabel.innerText = "Intermediate Position";
+        confidenceLabel.className = "font-mono text-xs text-indigo-300";
+      }
+
+      // Update Live Practice Diagnostic Tip if in Live continuous mode
+      if (practiceMode === 'live' && !isRecording && !isCalibrating) {
+        updateDiagnosticCard(selectedVowelTarget, liveMetrics);
+      }
+    }
+
+    /* NEUTRAL BASELINE CALIBRATION WIZARD */
+    let isCalibrating = false;
+
+    function startCalibration() {
+      if (isCalibrating) return;
+
+      isCalibrating = true;
+      calibration.samplesMAR = [];
+      calibration.samplesSpread = [];
+
+      const overlay = document.getElementById('overlay-screen');
+      const title = document.getElementById('overlay-title');
+      const subtitle = document.getElementById('overlay-subtitle');
+      const timerElem = document.getElementById('overlay-timer');
+      const progressFill = document.getElementById('overlay-progress-fill');
+
+      overlay.classList.remove('hidden');
+      title.innerText = "Neutral Baseline Calibration";
+      subtitle.innerText = "Look directly at camera with a closed, relaxed mouth.";
+
+      let countdown = 3;
+      timerElem.innerText = countdown;
+      progressFill.style.width = "0%";
+
+      const interval = setInterval(() => {
+        countdown--;
+        timerElem.innerText = countdown;
+        progressFill.style.width = `${((3 - countdown) / 3) * 100}%`;
+
+        if (countdown <= 0) {
+          clearInterval(interval);
+          finishCalibration();
+        }
+      }, 1000);
+    }
+
+    function finishCalibration() {
+      const overlay = document.getElementById('overlay-screen');
+
+      // Calculate Averages
+      if (calibration.samplesMAR.length > 0) {
+        const avgMAR = calibration.samplesMAR.reduce((a, b) => a + b, 0) / calibration.samplesMAR.length;
+        const avgSpread = calibration.samplesSpread.reduce((a, b) => a + b, 0) / calibration.samplesSpread.length;
+
+        calibration.baselineMAR = avgMAR;
+        calibration.baselineSpreadRatio = avgSpread;
+        calibration.isCalibrated = true;
+
+        document.getElementById('base-mar-text').innerText = avgMAR.toFixed(2);
+        document.getElementById('base-spread-text').innerText = avgSpread.toFixed(2);
+      }
+
+      overlay.classList.add('hidden');
+      isCalibrating = false;
+
+      // Toast notification or feedback update
+      document.getElementById('diag-headline').innerText = "Calibration Saved Successfully!";
+      document.getElementById('diag-tip').innerText = "Baseline neutral mouth shape established. You can now practice minimal pairs with individualized metrics.";
+    }
+
+    /* 1.5s EVALUATION & PEAK FRAME DETECTION */
+    function triggerEvaluation() {
+      if (isRecording || isCalibrating) return;
+
+      isRecording = true;
+      frameBuffer = [];
+
+      const overlay = document.getElementById('overlay-screen');
+      const title = document.getElementById('overlay-title');
+      const subtitle = document.getElementById('overlay-subtitle');
+      const timerElem = document.getElementById('overlay-timer');
+      const progressFill = document.getElementById('overlay-progress-fill');
+
+      overlay.classList.remove('hidden');
+      title.innerText = `Pronounce "${currentSelectedWord}"`;
+      subtitle.innerText = `Recording 1.5s window... Speak naturally!`;
+      timerElem.innerText = "1.5s";
+      progressFill.style.width = "100%";
+
+      let duration = 1500;
+      let elapsed = 0;
+      const step = 100;
+
+      const recordTimer = setInterval(() => {
+        elapsed += step;
+        const remaining = Math.max(0, (duration - elapsed) / 1000).toFixed(1);
+        timerElem.innerText = `${remaining}s`;
+        progressFill.style.width = `${((duration - elapsed) / duration) * 100}%`;
+
+        if (elapsed >= duration) {
+          clearInterval(recordTimer);
+          overlay.classList.add('hidden');
+          isRecording = false;
+          evaluatePeakFrame();
+        }
+      }, step);
+    }
+
+    function evaluatePeakFrame() {
+      if (frameBuffer.length === 0) {
+        // Fallback to live metrics if buffer empty
+        frameBuffer.push(liveMetrics);
+      }
+
+      /* Peak Articulation Frame Selection:
+         For /i/ target: Frame with highest Lip Width / Spread Ratio.
+         For /æ/ target: Frame with highest Mouth Aspect Ratio (MAR) jaw drop.
+      */
+      let peakFrame = frameBuffer[0];
+
+      if (selectedVowelTarget === 'i') {
+        frameBuffer.forEach(f => {
+          if (f.spreadRatio > peakFrame.spreadRatio) peakFrame = f;
+        });
+      } else {
+        frameBuffer.forEach(f => {
+          if (f.mar > peakFrame.mar) peakFrame = f;
+        });
+      }
+
+      // Evaluate peak frame performance
+      const evalResult = evaluateMetricsAgainstTarget(selectedVowelTarget, peakFrame);
+
+      // Update Diagnostic UI Card
+      document.getElementById('diag-headline').innerText = evalResult.title;
+      document.getElementById('diag-tip').innerText = evalResult.tip;
+      document.getElementById('accuracy-score').innerText = `${evalResult.accuracy}%`;
+
+      const matchBadge = document.getElementById('match-badge');
+      if (evalResult.accuracy >= 75) {
+        matchBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+        matchBadge.innerText = "Match Confirmed ✓";
+      } else {
+        matchBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40";
+        matchBadge.innerText = "Adjustment Needed ⚠";
+      }
+
+      // Append entry to History Log
+      addHistoryLogEntry(currentSelectedWord, selectedVowelTarget, evalResult, peakFrame);
+    }
+
+    /* EVALUATION EVALUATOR RULES */
+    function evaluateMetricsAgainstTarget(vowelTarget, metrics) {
+      const baseMAR = calibration.baselineMAR;
+      let accuracy = 50;
+      let title = "";
+      let tip = "";
+
+      if (vowelTarget === 'i') {
+        // Target: /i/ (beet, seat, etc.)
+        // Wants: High horizontal spread, low jaw opening
+        const isJawLow = metrics.mar < baseMAR * 1.4;
+        const isSpreadWide = metrics.spreadDelta > 0.10;
+
+        if (isJawLow && isSpreadWide) {
+          accuracy = Math.min(98, Math.round(80 + (metrics.spreadDelta * 50)));
+          title = "Perfect /i/ Articulation!";
+          tip = "Excellent! Lips are retracted back into a wide smile posture while keeping jaw height controlled.";
+        } else if (!isJawLow && isSpreadWide) {
+          accuracy = 65;
+          title = "Jaw Opening Too Wide for /i/";
+          tip = "Bring your upper and lower teeth closer together! /i/ requires a high tongue position and narrow vertical jaw aperture.";
+        } else if (isJawLow && !isSpreadWide) {
+          accuracy = 60;
+          title = "Needs More Lip Retraction (Smile)";
+          tip = "Pull the corners of your mouth further outward horizontally—think about smiling wider as you say the vowel.";
+        } else {
+          accuracy = 40;
+          title = "Target Gesture Not Reached";
+          tip = "Close jaw slightly and pull mouth corners outward toward your ears to achieve the high front /i/ vowel posture.";
+        }
+
+      } else {
+        // Target: /æ/ (bat, sat, etc.)
+        // Wants: High vertical jaw drop (MAR > baseline * 1.5)
+        const isJawDropped = metrics.mar > baseMAR * 1.5;
+
+        if (isJawDropped) {
+          accuracy = Math.min(98, Math.round(75 + ((metrics.mar - baseMAR) * 80)));
+          title = "Perfect /æ/ Articulation!";
+          tip = "Great vertical jaw displacement! Opening the lower jaw wide allows proper low front vowel production.";
+        } else {
+          accuracy = Math.max(35, Math.round(40 + (metrics.mar / baseMAR) * 20));
+          title = "Needs More Jaw Drop for /æ/";
+          tip = "Open your mouth wider vertically! Lower your bottom jaw down toward your neck to produce the open /æ/ sound.";
+        }
+      }
+
+      return { accuracy, title, tip };
+    }
+
+    function updateDiagnosticCard(vowelTarget, metrics) {
+      const evalResult = evaluateMetricsAgainstTarget(vowelTarget, metrics);
+      document.getElementById('diag-headline').innerText = evalResult.title;
+      document.getElementById('diag-tip').innerText = evalResult.tip;
+      document.getElementById('accuracy-score').innerText = `${evalResult.accuracy}%`;
+    }
+
+    /* HISTORY LOG MANAGER */
+    function addHistoryLogEntry(word, vowelTarget, evalResult, peakMetrics) {
+      const tbody = document.getElementById('history-tbody');
+      const emptyRow = document.getElementById('empty-history-row');
+      if (emptyRow) emptyRow.remove();
+
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const detectedVowelStr = peakMetrics.probI > peakMetrics.probAe ? '/i/' : '/æ/';
+
+      const logItem = {
+        time: timeStr,
+        word: word,
+        target: vowelTarget === 'i' ? '/i/' : '/æ/',
+        detected: detectedVowelStr,
+        mar: peakMetrics.mar.toFixed(2),
+        accuracy: `${evalResult.accuracy}%`,
+        tip: evalResult.tip
+      };
+
+      historyLog.unshift(logItem);
+
+      const tr = document.createElement('tr');
+      tr.className = "hover:bg-slate-800/50 transition";
+      tr.innerHTML = `
+        <td class="p-3 font-mono text-slate-400 text-[11px]">${logItem.time}</td>
+        <td class="p-3 font-bold text-white">${logItem.word}</td>
+        <td class="p-3 font-mono ${logItem.target === '/i/' ? 'text-emerald-400' : 'text-amber-400'}">${logItem.target}</td>
+        <td class="p-3 font-mono ${logItem.detected === '/i/' ? 'text-emerald-400' : 'text-amber-400'}">${logItem.detected}</td>
+        <td class="p-3 font-mono text-cyan-300">${logItem.mar}</td>
+        <td class="p-3 font-mono font-bold ${evalResult.accuracy >= 75 ? 'text-emerald-400' : 'text-amber-400'}">${logItem.accuracy}</td>
+        <td class="p-3 text-slate-300 text-[11px] max-w-xs truncate">${logItem.tip}</td>
+      `;
+
+      tbody.insertBefore(tr, tbody.firstChild);
+    }
+
+    function clearHistoryLog() {
+      historyLog = [];
+      const tbody = document.getElementById('history-tbody');
+      tbody.innerHTML = `
+        <tr id="empty-history-row">
+          <td colspan="7" class="p-6 text-center text-slate-500 italic">
+            No evaluation history recorded yet. Select a word and click "Evaluate".
+          </td>
+        </tr>
+      `;
+    }
+
+
+    /* CANVAS RENDER LOOP & DYNAMIC OVERLAYS */
+    function renderLoop() {
+      const w = canvasElem.width;
+      const h = canvasElem.height;
+
+      // Clear Canvas
+      ctx.clearRect(0, 0, w, h);
+
+      if (isSimMode) {
+        // Render Synthesized Face Visualizer in Sim Mode
+        renderSimulatedFace(ctx, w, h);
+      } else {
+        // Mirror canvas horizontally for natural webcam experience
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(videoElem, -w, 0, w, h);
+        ctx.restore();
+
+        // Render MediaPipe Face Landmarks overlay if present
+        if (liveMetrics.landmarks) {
+          renderLipLandmarks(ctx, liveMetrics.landmarks, w, h);
+        }
+      }
+
+      // Render Dynamic Articulatory Target Overlays & Directional Arrows
+      renderArticulatoryTargetOverlay(ctx, w, h);
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    /* SIMULATED FACE DRAWING ENGINE */
+    function renderSimulatedFace(ctx, w, h) {
+      const centerX = w / 2;
+      const centerY = h / 2;
+
+      // Draw Stylized Head Contour
+      ctx.beginPath();
+      ctx.ellipse(centerX, centerY, 130, 170, 0, 0, 2 * Math.PI);
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#334155';
+      ctx.stroke();
+
+      // Draw Stylized Eyes
+      const eyeOffset = 50;
+      const eyeY = centerY - 40;
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(centerX - eyeOffset, eyeY, 8, 0, 2 * Math.PI);
+      ctx.arc(centerX + eyeOffset, eyeY, 8, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Draw Lip Contour driven by simulation sliders
+      const mouthY = centerY + 40;
+      const lipW = liveMetrics.lipWidthPx || 60;
+      const lipH = liveMetrics.lipHeightPx || 12;
+
+      ctx.beginPath();
+      ctx.ellipse(centerX, mouthY, lipW, lipH, 0, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#f87171';
+      ctx.stroke();
+    }
+
+    /* LIP LANDMARK OVERLAY MESH */
+    function renderLipLandmarks(ctx, landmarks, w, h) {
+      // Inner lip indices
+      const innerIndices = [78, 191, 80, 13, 310, 311, 308, 402, 317, 14, 87, 178];
+      
+      ctx.save();
+      
+      // Draw Inner Lip Polyline
+      ctx.beginPath();
+      innerIndices.forEach((idx, i) => {
+        // Accounting for mirrored webcam coordinates
+        const x = (1.0 - landmarks[idx].x) * w;
+        const y = landmarks[idx].y * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.25)';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#06b6d4';
+      ctx.stroke();
+
+      // Draw Key Articulatory Landmarks
+      const keyIndices = [13, 14, 78, 308];
+      keyIndices.forEach(idx => {
+        const x = (1.0 - landmarks[idx].x) * w;
+        const y = landmarks[idx].y * h;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    }
+
+    /* DYNAMIC TARGET BOUNDING BOX & DIRECTIONAL ARROWS */
+    function renderArticulatoryTargetOverlay(ctx, w, h) {
+      const centerX = w / 2;
+      const centerY = h / 2 + 30;
+
+      ctx.save();
+
+      if (selectedVowelTarget === 'i') {
+        // Target /i/: Wide green target rectangle with horizontal smile arrows
+        const boxW = 160;
+        const boxH = 50;
+        
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(centerX - boxW/2, centerY - boxH/2, boxW, boxH);
+        ctx.setLineDash([]);
+
+        // Horizontal Outward Arrows ← → indicating lip spread expansion
+        const arrowOffset = boxW/2 + 25;
+        drawArrow(ctx, centerX - boxW/2 - 5, centerY, centerX - arrowOffset, centerY, '#10b981');
+        drawArrow(ctx, centerX + boxW/2 + 5, centerY, centerX + arrowOffset, centerY, '#10b981');
+
+        // Overlay Label
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('← SPREAD LIPS WIDE (/i/) →', centerX, centerY - boxH/2 - 10);
+
+      } else {
+        // Target /æ/: Tall amber target rectangle with vertical downward arrow
+        const boxW = 120;
+        const boxH = 100;
+
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(centerX - boxW/2, centerY - boxH/2, boxW, boxH);
+        ctx.setLineDash([]);
+
+        // Downward Arrow ↓ indicating jaw drop
+        const arrowYStart = centerY + boxH/2 + 5;
+        const arrowYEnd = arrowYStart + 30;
+        drawArrow(ctx, centerX, arrowYStart, centerX, arrowYEnd, '#f59e0b');
+
+        // Overlay Label
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('↓ DROP JOWER JAW WIDE (/æ/)', centerX, centerY - boxH/2 - 10);
+      }
+
+      ctx.restore();
+    }
+
+    /* ARROW DRAWING HELPER */
+    function drawArrow(ctx, fromx, fromy, tox, toy, color) {
+      const headlen = 10;
+      const angle = Math.atan2(toy - fromy, tox - fromx);
+
+      ctx.beginPath();
+      ctx.moveTo(fromx, fromy);
+      ctx.lineTo(tox, toy);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(tox, toy);
+      ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+  </script>
+</body>
+</html>
